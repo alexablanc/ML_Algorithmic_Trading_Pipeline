@@ -26,17 +26,17 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(minutes=5)
 }
 
 # The DAG
 with DAG(
     'llm_qlearner_trading_pipeline',
     default_args=default_args,
-    description='A daily trading pipeline using LLM signal generation and Q-Learner position sizing',
-    schedule_interval='0 18 * * 1-5', # Run at 6 PM UTC Monday-Friday (after market close)
+    description='A daily trading pipeline using LLM signal generation and Q-Learner position',
+    schedule='0 18 * * 1-5', # Run at 6 PM UTC Monday-Friday (after market close)
     catchup=False,
-    tags=['trading', 'ml4t'],
+    tags=['trading']
 ) as dag:
 
     def fetch_market_data(**kwargs):

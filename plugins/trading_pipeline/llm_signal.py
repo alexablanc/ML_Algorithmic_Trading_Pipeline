@@ -4,15 +4,15 @@ import openai
 def get_llm_signal(bb_pb, rsi_val, momentum_val):
     """
     Use OpenAI API to generate a directional trading signal based on indicators.
-    Returns: 0 (Bearish/Short), 1 (Neutral/Cash), 2 (Bullish/Long)
+    Returns: 0 (Bearish/Short), 1 (Neutral/Cash), 2 (Bullish/Long). This is combined with other indicators and put into a discretized integer
     """
     # Use the pre-configured OPENAI_API_KEY environment variable
     client = openai.OpenAI()
     
     system_prompt = """You are a quantitative trading assistant. Your task is to analyze technical indicators and output a single integer representing your trading signal:
-    0 = Bearish (Expect price to drop, recommend shorting)
-    1 = Neutral (Unclear direction, recommend holding cash)
-    2 = Bullish (Expect price to rise, recommend going long)
+    0 = Bearish (Expect price to drop, short)
+    1 = Neutral (Unclear direction, hold)
+    2 = Bullish (Expect price to rise, long)
     
     You must reply with ONLY a single integer (0, 1, or 2). Do not include any other text or explanation.
     """

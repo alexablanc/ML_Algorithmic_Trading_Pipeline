@@ -131,7 +131,8 @@ with DAG(
         # 3. Save current state and action for tomorrow's reward calculation
         with open(state_file, 'w') as f:
             #needs to use prev_close so that it can calculate the change and the new state
-            json.dump({'state': state, 'action': action, 'prev_close': today_close, 'date': latest_date}, f)
+            json.dump({'state': int(state), 'action': int(action), 'prev_close': float(today_close), 'date': str(latest_date)}, f)
+
             
         # 4. Map action to trade size
         # 0 = Short (-1000), 1 = Cash (0), 2 = Long (+1000). we then subtract 1 to get the multiplier

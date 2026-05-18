@@ -10,4 +10,6 @@ webserver_config.py
 airflow.cfg
 airflow.db
 QLearner.py
-
+*.pkl
+qlearner_state.json
+trades_log.csv

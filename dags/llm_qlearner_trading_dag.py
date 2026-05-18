@@ -8,6 +8,12 @@ import os
 import csv
 import json
 
+# Persistent file paths — written to the mounted project volume
+STATE_FILE   = '/usr/local/airflow/results/qlearner_state.json'
+MODEL_FILE   = '/usr/local/airflow/results/qlearner_model.pkl'
+TRADES_FILE  = '/usr/local/airflow/results/trades_log.csv'
+METRICS_FILE = '/usr/local/airflow/results/metrics.json'
+
 # Add plugins path to sys.path so we can import our modules
 import sys
 sys.path.insert(0, '/usr/local/airflow/plugins')
@@ -97,10 +103,10 @@ with DAG(
         
         # 1. Calculate reward for yesterday's action (if any)
         # We store the previous state and action in a local JSON file to persist across DAG runs
-        state_file = '/tmp/qlearner_state.json'
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
 
-        if os.path.exists(state_file) and os.path.getsize(state_file) > 0:
-            with open(state_file, 'r') as f:
+        if os.path.exists(STATE_FILE) and os.path.getsize(STATE_FILE) > 0:
+            with open(STATE_FILE, 'r') as f:
                 prev_state_data = json.load(f)
                 
             prev_action = prev_state_data.get('action', 1) # Default to Cash (1)
@@ -129,7 +135,7 @@ with DAG(
         action = get_q_action(state)
         
         # 3. Save current state and action for tomorrow's reward calculation
-        with open(state_file, 'w') as f:
+        with open(STATE_FILE, 'w') as f:
             #needs to use prev_close so that it can calculate the change and the new state
             json.dump({'state': int(state), 'action': int(action), 'prev_close': float(today_close), 'date': str(latest_date)}, f)
 
@@ -149,9 +155,10 @@ with DAG(
         latest_date = ti.xcom_pull(task_ids='fetch_market_data', key='latest_date')
         target_position = ti.xcom_pull(task_ids='execute_q_learner', key='target_position')
         close_price = ti.xcom_pull(task_ids='execute_q_learner', key='close_price')
-        
-        trades_file = '/tmp/trades_log.csv'
-        
+
+        os.makedirs(os.path.dirname(TRADES_FILE), exist_ok=True)
+        trades_file = TRADES_FILE
+
         # 1. Determine the actual order needed to reach the target position
         current_position = 0
         if os.path.exists(trades_file):
@@ -181,7 +188,7 @@ with DAG(
             print(f"Current Performance: {metrics}")
             
             # Save metrics
-            with open('/tmp/metrics.json', 'w') as f:
+            with open(METRICS_FILE, 'w') as f:
                 json.dump(metrics, f)
 
     # Define tasks

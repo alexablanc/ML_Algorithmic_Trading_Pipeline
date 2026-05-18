@@ -9,10 +9,10 @@ import csv
 import json
 
 # Persistent file paths — written to the mounted project volume
-STATE_FILE   = '/usr/local/airflow/results/qlearner_state.json'
-MODEL_FILE   = '/usr/local/airflow/results/qlearner_model.pkl'
-TRADES_FILE  = '/usr/local/airflow/results/trades_log.csv'
-METRICS_FILE = '/usr/local/airflow/results/metrics.json'
+STATE_FILE   = '/usr/local/airflow/include/qlearner_state.json'
+MODEL_FILE   = '/usr/local/airflow/include/qlearner_model.pkl'
+TRADES_FILE  = '/usr/local/airflow/include/trades_log.csv'
+METRICS_FILE = '/usr/local/airflow/include/metrics.json'
 
 # Add plugins path to sys.path so we can import our modules
 import sys

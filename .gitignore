@@ -12,4 +12,3 @@ airflow.db
 QLearner.py
 *.pkl
 qlearner_state.json
-trades_log.csv

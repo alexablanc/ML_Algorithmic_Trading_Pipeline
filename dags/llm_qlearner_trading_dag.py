@@ -98,17 +98,18 @@ with DAG(
         # 1. Calculate reward for yesterday's action (if any)
         # We store the previous state and action in a local JSON file to persist across DAG runs
         state_file = '/tmp/qlearner_state.json'
-        
-        if os.path.exists(state_file):
+
+        if os.path.exists(state_file) and os.path.getsize(state_file) > 0:
             with open(state_file, 'r') as f:
                 prev_state_data = json.load(f)
                 
             prev_action = prev_state_data.get('action', 1) # Default to Cash (1)
             
             # Calculate daily return
-            daily_return = (today_close / yesterday_close) - 1
-            
-            # Reward: 
+            prev_close = prev_state_data.get('prev_close', today_close)
+            daily_return = (today_close / prev_close) - 1
+
+            # Reward:
             # Action 0 (Short): -daily_return
             # Action 1 (Cash): 0
             # Action 2 (Long): +daily_return
@@ -129,7 +130,7 @@ with DAG(
         
         # 3. Save current state and action for tomorrow's reward calculation
         with open(state_file, 'w') as f:
-            json.dump({'state': state, 'action': action, 'date': latest_date}, f)
+            json.dump({'state': state, 'action': action, 'prev_close': today_close, 'date': latest_date}, f)
             
         # 4. Map action to trade size
         # 0 = Short (-1000), 1 = Cash (0), 2 = Long (+1000)

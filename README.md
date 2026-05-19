@@ -1,6 +1,6 @@
-# LLM + Q-Learner Daily Trading Pipeline (Airflow / Astronomer)
+# LLM + Dyna-Q Daily Trading Pipeline
 
-This project implements a daily trading pipeline using Apache Airflow, combining an LLM for signal generation with a Dyna-Q Learner for position sizing.
+Airflow-orchestrated pipeline pulling 60 days of live market data via yfinance. Integrates an OpenAI API call that interprets technical indicators (Bollinger %B, RSI, momentum) to generate a bullish/bearish/neutral signal, which feeds into a Dyna-Q reinforcement learning agent written from scratch. Adapted from a deterministic grid-world formulation to a live stochastic market environment — replacing the deterministic transition function with an empirically learned distribution `P(s' | s, a)` accumulated from real market observations. Encodes a 3,000-state space (10 bins × 10 bins × 10 bins × 3 LLM signal values). Developed as an independent extension of MSCS coursework at Georgia Tech.
 
 ---
 
@@ -19,101 +19,99 @@ log_trade_and_metrics
 | Task | Description |
 |---|---|
 | `fetch_market_data` | Downloads 60 days of JPM OHLCV data via `yfinance` and computes BB %B, RSI, and Momentum |
-| `generate_llm_signal` | Sends the indicator values to GPT-4o-mini and receives a directional signal: 0=Bearish, 1=Neutral, 2=Bullish |
-| `execute_q_learner` | Discretizes the indicator + LLM state into one of 3,000 states, updates the Q-table with yesterday's reward (Dyna-Q with 200 hallucinations), and queries for today's action |
-| `log_trade_and_metrics` | Writes the trade to `/tmp/trades_log.csv` and logs cumulative return, Sharpe ratio, and mean daily return to `/tmp/metrics.json` |
+| `generate_llm_signal` | Sends indicator values to GPT-4o-mini and receives a directional signal: 0=Bearish, 1=Neutral, 2=Bullish |
+| `execute_q_learner` | Discretizes the indicator + LLM state into one of 3,000 states, updates the Q-table with yesterday's reward (Dyna-Q with 200 planning steps), and queries for today's action |
+| `log_trade_and_metrics` | Appends the trade to `include/trades_log.csv` and logs cumulative return, Sharpe ratio, and mean daily return to `include/metrics.json` |
 
 ---
 
 ## File Structure
 
 ```
-airflow_project/
+llm_qlearner_trading/
 ├── dags/
 │   └── llm_qlearner_trading_dag.py       # Main DAG definition
 ├── plugins/
 │   └── trading_pipeline/
-│       ├── QLearner.py                   # Dyna-Q implementation available upon request
-│       ├── indicators.py                 # BB%B, RSI, Momentum (yfinance-compatible)
+│       ├── QLearner.py                   # Dyna-Q implementation (available upon request)
+│       ├── indicators.py                 # BB %B, RSI, Momentum
 │       ├── llm_signal.py                 # OpenAI API signal generation
 │       ├── agent.py                      # State discretization + Q-Learner wrapper
 │       └── performance.py               # Cumulative return, Sharpe ratio
+├── include/
+│   ├── trades_log.csv                    # Live trade log (auto-updated daily)
+│   ├── metrics.json                      # Latest performance metrics
+│   └── qlearner_state.json              # Previous day's state (used to compute reward)
+├── .env                                  # API keys (not committed)
+├── packages.txt
+├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Setup Instructions
+## Setup
 
-### 1. Add to your Astronomer project
+### Prerequisites
 
-Copy the `dags/` and `plugins/` folders into your existing Astronomer project directory (the one you used for your exoplanet pipeline).
+- [Astronomer CLI](https://docs.astronomer.io/astro/cli/install-cli) installed
+- An [OpenAI API key](https://platform.openai.com/api-keys)
+
+### 1. Clone the repository
 
 ```bash
-cp -r dags/* ~/your-astronomer-project/dags/
-cp -r plugins/* ~/your-astronomer-project/plugins/
+git clone https://github.com/alexablanc/machine_learning_trading_portfolio_optimization.git
+cd llm_qlearner_trading
 ```
 
-### 2. Add the OpenAI API key as an Airflow Variable or Environment Variable
+### 2. Add your OpenAI API key
 
-In the Astronomer UI, go to **Admin → Variables** and add:
-
-| Key | Value |
-|---|---|
-| `OPENAI_API_KEY` | `your-openai-api-key` |
-
-Or add it to your `.env` file in the Astronomer project:
+Create a `.env` file in the project root:
 
 ```
 OPENAI_API_KEY=your-openai-api-key
 ```
 
-### 3. Add Python dependencies
-
-Add the following to your `requirements.txt` in the Astronomer project:
-
-```
-yfinance
-openai
-```
-
-### 4. Start the local environment
+### 3. Start the local Airflow environment
 
 ```bash
 astro dev start
 ```
 
-### 5. Trigger the DAG
+This builds the Docker image, installs dependencies from `requirements.txt`, and starts Airflow at `http://llm-qlearner-trading.localhost`.
 
-In the Airflow UI at `http://localhost:8080`, find `llm_qlearner_trading_pipeline` and toggle it ON. It will run automatically at 6 PM UTC on weekdays (after US market close).
+### 4. Enable and run the DAG
 
-To trigger it manually for testing, click the **Trigger DAG** button.
+In the Airflow UI, find `llm_qlearner_trading_pipeline`, toggle it **ON**, and click **Trigger DAG** to run it manually for the first time.
+
+The pipeline will then run automatically at **11:00 AM UTC (4:00 AM PST) on weekdays**, using the previous trading day's closing data.
 
 ---
 
-## How the Q-Learner Works in This Context
-- **QLearner.py Disclaimer:** Not included — available upon employer request
-- **State space (3,000 states):** Combines 10 bins for BB %B + 10 bins for RSI + 10 bins for Momentum + 3 LLM signal values.
-- **Actions (3):** 0 = Short (-1000 shares), 1 = Cash (0 shares), 2 = Long (+1000 shares).
-- **Reward:** The daily return of JPM, signed by the position held: Long gets +return, Short gets -return, Cash gets 0.
-- **Dyna-Q (200 hallucinations):** Since real market data arrives only once per day, Dyna-Q uses the learned transition model to simulate 200 additional updates per real step, dramatically accelerating learning.
-- **Persistence:** The Q-table is saved to `/tmp/qlearner_model.pkl` after each run so it accumulates learning across days.
+## How It Works
+
+- **State space (3,000 states):** 10 bins for BB %B × 10 bins for RSI × 10 bins for Momentum × 3 LLM signal values.
+- **Actions:** 0 = Short (−1000 shares), 1 = Cash (0 shares), 2 = Long (+1000 shares).
+- **Reward:** The daily return of JPM, signed by the position held — Long earns +return, Short earns −return, Cash earns 0.
+- **Dyna-Q (200 planning steps):** Since real market data arrives only once per day, Dyna-Q simulates 200 additional Bellman updates per real step using the learned transition model `T_count[s, a, s']` and reward model `R_model[s, a, s']`, accelerating Q-table convergence without requiring additional real interactions.
+- **Exploration:** Starts at `rar=0.5` (50% random actions), decaying at `radr=0.99` per step. Expect several weeks of daily runs before the policy stabilizes.
 
 ---
 
 ## Output Files
 
+All output files are written to `include/` and sync automatically to your local project folder.
+
 | File | Description |
 |---|---|
-| `/tmp/trades_log.csv` | Cumulative log of all trades: Date, Symbol, Order, Price, Target_Position |
-| `/tmp/metrics.json` | Latest performance metrics: Cumulative Return, Sharpe Ratio, Mean Daily Return |
-| `/tmp/qlearner_model.pkl` | Serialized Q-Learner model (persists across daily runs) |
-| `/tmp/qlearner_state.json` | Previous day's state and action (used to compute reward) |
+| `include/trades_log.csv` | Cumulative log of all trades: Date, Symbol, Order, Price, Target_Position |
+| `include/metrics.json` | Latest performance metrics: Cumulative Return, Sharpe Ratio, Mean Daily Return |
+| `include/qlearner_state.json` | Previous day's state, action, and closing price (used to compute next reward) |
 
 ---
 
 ## Notes
 
-- The pipeline trades **JPM only** to match your course project. Change the `symbol` variable in the DAG to trade any ticker supported by `yfinance`.
-- The Q-Learner starts with `rar=0.5` (50% random actions) and decays at `radr=0.99` per step. It will take several weeks of daily runs to converge to a stable policy.
-- This is a **paper trading** pipeline — it logs intended trades but does not connect to a brokerage. To execute real trades, integrate the Alpaca API in the `log_trade_and_metrics` task.
+- Change the `symbol` variable in the DAG to trade any ticker supported by `yfinance`.
+- This is a **paper trading** pipeline — it logs intended trades but does not connect to a brokerage. To execute real trades, integrate the [Alpaca API](https://alpaca.markets/) in the `log_trade_and_metrics` task.
+- `QLearner.py` is not included in this repository and is available upon request.

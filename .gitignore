@@ -11,4 +11,3 @@ airflow.cfg
 airflow.db
 QLearner.py
 *.pkl
-qlearner_state.json

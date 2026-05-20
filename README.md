@@ -113,5 +113,3 @@ All output files are written to `include/` and sync automatically to your local 
 ## Notes
 
 - Change the `symbol` variable in the DAG to trade any ticker supported by `yfinance`.
-- This is a **paper trading** pipeline — it logs intended trades but does not connect to a brokerage. To execute real trades, integrate the [Alpaca API](https://alpaca.markets/) in the `log_trade_and_metrics` task.
-- `QLearner.py` is not included in this repository and is available upon request.
